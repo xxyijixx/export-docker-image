@@ -1,0 +1,49 @@
+name: Export Docker Image
+
+permissions:
+  contents: write
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_name:
+        description: 'Docker image name'
+        required: true
+      image_version:
+        description: 'Docker image version'
+        required: true
+
+jobs:
+  export-image:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker
+        uses: docker/setup-buildx-action@v3
+
+      - name: Clean up Docker images
+        run: |
+          docker system prune -f
+          if docker images | grep -q "${{ github.event.inputs.image_name }}"; then
+            docker rmi -f ${{ github.event.inputs.image_name }}:${{ github.event.inputs.image_version }} || true
+          fi
+
+      - name: Pull Docker image
+        run: docker pull ${{ github.event.inputs.image_name }}:${{ github.event.inputs.image_version }}
+
+      - name: Export Docker image
+        run: docker save -o images.tar ${{ github.event.inputs.image_name }}:${{ github.event.inputs.image_version }}
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.image_version }}
+          name: Release ${{ github.event.inputs.image_version }}
+          body: |
+            Image: ${{ github.event.inputs.image_name }}
+            Version: ${{ github.event.inputs.image_version }}
+          files: images.tar
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
